@@ -41,10 +41,16 @@ func font() -> Font:
 	return get_theme_default_font()
 
 
+var _panel_on := UiStyle.panel(UiStyle.NEON)
+var _panel_off := UiStyle.panel(UiStyle.NEON.darkened(0.6), UiStyle.PANEL_BG, 4)
+
+
 func draw_panel() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), BG)
-	draw_rect(Rect2(Vector2.ZERO, size), FRAME if active else FRAME.darkened(0.6), false, 4.0)
-	draw_string(font(), Vector2(0, 40), title, HORIZONTAL_ALIGNMENT_CENTER, size.x, 30, GOLD if active else Color.GRAY)
+	draw_style_box(_panel_on if active else _panel_off, Rect2(Vector2.ZERO, size))
+	var f := font()
+	var col := GOLD if active else Color(0.6, 0.55, 0.65)
+	draw_string_outline(f, Vector2(0, 42), title, HORIZONTAL_ALIGNMENT_CENTER, size.x, 32, 8, Color(0.05, 0, 0.08))
+	draw_string(f, Vector2(0, 42), title, HORIZONTAL_ALIGNMENT_CENTER, size.x, 32, col)
 	if is_locked():
 		draw_centered(lock_text, size / 2.0, 26, Color(0.7, 0.6, 0.8))
 	if key_hint != "":

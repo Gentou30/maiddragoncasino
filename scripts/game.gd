@@ -13,7 +13,10 @@ const START_DEBT := 30_000_000
 const LOAN_AMOUNT := 10_000_000
 const INPUT_LOCK_SEC := 1.2 # 画面が切り替わった直後の連打で先に進まないようにする
 const SHOP_LOCK_SEC := 2.0 # 1日の終わりの連打でアイテムを誤って買わないようにする
-const MAID_TEXTURE := preload("res://assets/images/test_maid_dragon.png")
+const BG_TEXTURE := preload("res://assets/images/bg_casino.jpg")
+const MAID_FULL := preload("res://assets/images/maid_full.png")
+const COIN_TEXTURE := preload("res://assets/images/slot/coin.png")
+const MAID_MOODS := ["normal", "happy", "scheme", "panic"]
 
 const SlotGame := preload("res://scripts/games/slot_game.gd")
 const CardGame := preload("res://scripts/games/card_game.gd")
@@ -44,7 +47,16 @@ var _clock := 0.0
 var _said_hurry := false
 var _version := ""
 
-var _bg: ColorRect
+var _bg: TextureRect
+var _bg_dim: ColorRect
+var _hud_box: Panel
+var _bubble: Panel
+var _maid_tex := {}
+var _mood := ""
+var _speech_at := 0.0
+const SPEECH_HOLD_SEC := 5.0 # プレイ中、この秒数たったら古いセリフを状況のセリフに置き換える
+var _ov_title: Label
+var _title_art: TextureRect
 var _money_label: Label
 var _status_label: Label
 var _time_label: Label
@@ -60,9 +72,20 @@ func _ready() -> void:
 	var v := FileAccess.get_file_as_string("res://version.txt").strip_edges()
 	_version = v if v != "" else "dev"
 
-	_bg = ColorRect.new()
-	_bg.color = Color(0.06, 0.01, 0.1)
+	for m in MAID_MOODS:
+		_maid_tex[m] = load("res://assets/images/maid_%s.png" % m)
+
+	_bg = TextureRect.new()
+	_bg.texture = BG_TEXTURE
+	_bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	add_child(_bg)
+	_bg_dim = ColorRect.new()
+	_bg_dim.color = Color(0.04, 0.0, 0.08, 0.45)
+	add_child(_bg_dim)
+	_hud_box = Panel.new()
+	_hud_box.add_theme_stylebox_override("panel", UiStyle.panel(UiStyle.PINK, Color(0.08, 0.02, 0.12, 0.85), 10, 16))
+	add_child(_hud_box)
 
 	for g: MiniGame in [SlotGame.new(), CardGame.new(), RouletteGame.new()]:
 		g.judged.connect(_on_judged.bind(g))
@@ -70,18 +93,23 @@ func _ready() -> void:
 		games.append(g)
 
 	_money_label = _make_label(30, MiniGame.GOLD)
-	_status_label = _make_label(22, Color(0.9, 0.8, 1.0))
-	_time_label = _make_label(48, Color.WHITE)
+	UiStyle.outline(_money_label)
+	_status_label = _make_label(22, Color(0.95, 0.85, 1.0))
+	UiStyle.outline(_status_label, 6)
+	_time_label = _make_label(52, Color.WHITE)
 	_time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	UiStyle.outline(_time_label, 10)
 
+	_bubble = Panel.new()
+	_bubble.add_theme_stylebox_override("panel", UiStyle.panel(UiStyle.PINK, Color(1, 0.95, 0.98, 0.95), 6, 18))
+	add_child(_bubble)
+	_speech = _make_label(20, Color(0.35, 0.05, 0.25))
+	_speech.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_speech.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_maid = TextureRect.new()
-	_maid.texture = MAID_TEXTURE
 	_maid.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_maid.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	add_child(_maid)
-	_speech = _make_label(20, Color(1, 0.85, 0.95))
-	_speech.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_speech.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
 	_touch_pad = TouchPad.new()
 	add_child(_touch_pad)
@@ -94,7 +122,18 @@ func _ready() -> void:
 	_overlay.color = Color(0.05, 0.0, 0.08, 0.9)
 	_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_overlay)
-	_overlay_label = _make_label(30, Color.WHITE, _overlay)
+	_title_art = TextureRect.new()
+	_title_art.texture = MAID_FULL
+	_title_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_title_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_title_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_overlay.add_child(_title_art)
+	_ov_title = _make_label(60, UiStyle.GOLD, _overlay)
+	_ov_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_ov_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	UiStyle.outline(_ov_title, 14)
+	_overlay_label = _make_label(28, Color.WHITE, _overlay)
+	UiStyle.outline(_overlay_label, 8)
 	_overlay_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_overlay_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_overlay_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -133,6 +172,7 @@ func _set_state(s: State) -> void:
 	_overlay.visible = not playing
 	_touch_pad.visible = playing and _touch()
 	_shop_box.visible = s == State.SHOP
+	_title_art.visible = s == State.TITLE or s == State.RESULT
 	for g in games:
 		g.active = false
 	_update_hud()
@@ -142,7 +182,8 @@ func _set_state(s: State) -> void:
 func _show_title() -> void:
 	_set_state(State.TITLE)
 	var how := "下のボタン" if _touch() else "A / S / D キー"
-	_overlay_label.text = "メイドドラゴンカジノ（試作）\n\n借金 %s を3日で返せ！\n%sで複数のギャンブルを同時に操作\n\n%sでスタート\n\nbuild %s" % [
+	_ov_title.text = "メイドドラゴン\nカジノ"
+	_overlay_label.text = "借金 %s を3日で返せ！\n%sで複数のギャンブルを同時に操作\n\n%sでスタート\n\nbuild %s" % [
 		_money_text(START_DEBT), how, _go_text(), _version]
 	_say("ご主人様♡ 借金はたったの3000万円です！")
 
@@ -172,12 +213,13 @@ func _show_day_intro() -> void:
 	var added := ""
 	if day == 2:
 		added = "\n★ ルーレット(D) 解禁！"
-	_overlay_label.text = "DAY %d / %d\n\n今日のイベント: %s\n%s%s\n\n返済まであと %s\n\n%sで開店" % [
-		day, DAYS, event["name"], event["desc"], added, _money_text(target), _go_text()]
+	_ov_title.text = "DAY %d / %d" % [day, DAYS]
+	_overlay_label.text = "今日のイベント: %s\n%s%s\n\n返済まであと %s\n\n%sで開店" % [
+		event["name"], event["desc"], added, _money_text(target), _go_text()]
 	match day:
 		1: _say("1日目です♡ まずはスロットで肩慣らしですね！")
-		2: _say("今日はルーレットもありますよ♡ 全部同時です♡")
-		_: _say("最終日です♡ 返せなかったら…うふふ♡")
+		2: _say("今日はルーレットもありますよ♡ 全部同時です♡", "scheme")
+		_: _say("最終日です♡ 返せなかったら…うふふ♡", "scheme")
 
 
 func _start_day() -> void:
@@ -211,7 +253,8 @@ func _show_shop() -> void:
 			pool.append(item)
 	pool.shuffle()
 	offers = pool.slice(0, 3)
-	_overlay_label.text = "DAY %d 終了！  所持金 %s / 借金 %s\n\n― 夜の闇市 ―  1つだけ持ち帰れます" % [day, _money_text(money), _money_text(debt)]
+	_ov_title.text = "夜の闇市"
+	_overlay_label.text = "DAY %d 終了！ 所持金 %s / 借金 %s\n1つだけ持ち帰れます" % [day, _money_text(money), _money_text(debt)]
 	for c in _shop_box.get_children():
 		c.queue_free()
 	var keys := ["A", "S", "D"]
@@ -221,14 +264,16 @@ func _show_shop() -> void:
 		var key := "" if _touch() else "[%s] " % keys[i]
 		b.text = "%s%s\n◎ %s   ✕ %s" % [key, item["name"], item["good"], item["bad"]]
 		b.add_theme_font_size_override("font_size", 22)
+		UiStyle.button_styles(b)
 		b.pressed.connect(_buy.bind(i))
 		_shop_box.add_child(b)
 	var skip := Button.new()
 	skip.text = "何も買わない" if _touch() else "[Space] 何も買わない"
 	skip.add_theme_font_size_override("font_size", 22)
+	UiStyle.button_styles(skip)
 	skip.pressed.connect(_buy.bind(-1))
 	_shop_box.add_child(skip)
-	_say("ご主人様♡ どれも合法ですよ（たぶん）")
+	_say("ご主人様♡ どれも合法ですよ（たぶん）", "scheme")
 	_layout()
 
 
@@ -247,13 +292,16 @@ func _buy(i: int) -> void:
 func _show_result() -> void:
 	_set_state(State.RESULT)
 	var cleared := money >= debt
-	var lines := "完済！！" if cleared else "破産…"
-	lines += "\n\n所持金 %s\n借金 %s\n%s\n最大コンボ %d\n\n%sでもう一回" % [
+	_ov_title.text = "完済！！" if cleared else "破産…"
+	var lines := "所持金 %s\n借金 %s\n%s\n最大コンボ %d\n\n%sでもう一回" % [
 		_money_text(money), _money_text(debt),
 		("残り %s はメイドのお給料に" % _money_text(money - debt)) if cleared else ("足りない額 %s" % _money_text(debt - money)),
 		best_combo, _go_text()]
 	_overlay_label.text = lines
-	_say("おめでとうございます！ 次は私の借金ですね♡" if cleared else "大丈夫です！ ご主人様にはまだ担保があります♡")
+	if cleared:
+		_say("おめでとうございます！ 次は私の借金ですね♡", "happy")
+	else:
+		_say("大丈夫です！ ご主人様にはまだ担保があります♡", "scheme")
 
 
 # ---- 補正 ----
@@ -323,9 +371,15 @@ func _process(delta: float) -> void:
 		games[1].lock_text = ""
 		_activate_games()
 		_say("カードも同時にどうぞ♡ 赤が出たら押してください！")
+	if _clock - _speech_at > SPEECH_HOLD_SEC:
+		var left := debt - money
+		if left > 0:
+			_say("返済まであと %s です♡" % _money_text(left))
+		else:
+			_say("もう返せちゃいます♡ もっと稼ぎましょう！", "happy")
 	if not _said_hurry and DAY_SEC - elapsed <= 10.0:
 		_said_hurry = true
-		_say("あれ？ もう時間がないですね♡")
+		_say("あれ？ もう時間がないですね♡", "panic")
 	if elapsed >= DAY_SEC:
 		_end_day()
 	_update_hud()
@@ -383,12 +437,20 @@ func _on_judged(text: String, amount: int, success: bool, game: MiniGame) -> voi
 		gain = int(roundf(amount * loss_mult / 1000.0)) * 1000
 	money += gain
 	_popup(game, "%s\n%s" % [text, ("+" if gain >= 0 else "") + _money_text(gain)], success)
+	var big := gain >= 500_000
+	if success:
+		_coin_burst(game, 24 if big else 8)
+		_pop_panel(game, 1.06 if big else 1.03)
+	else:
+		_shake_panel(game)
 	if combo == 10:
-		_say("才能があります！ ぜひ人生を賭けましょう！")
+		_say("才能があります！ ぜひ人生を賭けましょう！", "happy")
 	elif text == "x8":
-		_say("大当たりです♡ この調子で全部賭けましょう！")
+		_say("大当たりです♡ この調子で全部賭けましょう！", "happy")
+	elif money < 0 and money - gain >= 0:
+		_say("ご主人様!? 所持金がマイナスです！", "panic")
 	elif not success and randf() < 0.3:
-		_say("あらあら♡ 利息が増えちゃいますね")
+		_say("あらあら♡ 利息が増えちゃいますね", "scheme")
 
 
 # ---- 表示 ----
@@ -400,8 +462,57 @@ func _update_hud() -> void:
 	_time_label.text = "%.1f" % left
 
 
-func _say(text: String) -> void:
-	_speech.text = "「%s」" % text
+func _say(text: String, mood: String = "normal") -> void:
+	_speech.text = text
+	_speech_at = _clock
+	if mood != _mood:
+		_mood = mood
+		_maid.texture = _maid_tex.get(mood, _maid_tex["normal"])
+	# 話すたびにぷるんと弾ませる
+	_maid.pivot_offset = Vector2(_maid.size.x / 2.0, _maid.size.y)
+	var tw := _maid.create_tween()
+	tw.tween_property(_maid, "scale", Vector2(1.12, 0.88), 0.08)
+	tw.tween_property(_maid, "scale", Vector2(0.95, 1.06), 0.1)
+	tw.tween_property(_maid, "scale", Vector2.ONE, 0.12)
+
+
+func _coin_burst(game: MiniGame, amount: int) -> void:
+	var p := CPUParticles2D.new()
+	p.texture = COIN_TEXTURE
+	p.one_shot = true
+	p.explosiveness = 0.9
+	p.amount = amount
+	p.lifetime = 0.8
+	p.direction = Vector2.UP
+	p.spread = 70.0
+	p.initial_velocity_min = 250.0
+	p.initial_velocity_max = 500.0
+	p.gravity = Vector2(0, 900)
+	p.scale_amount_min = 0.08
+	p.scale_amount_max = 0.14
+	p.angular_velocity_min = -360.0
+	p.angular_velocity_max = 360.0
+	p.position = game.position + game.size / 2.0
+	p.z_index = 4
+	add_child(p)
+	p.emitting = true
+	p.finished.connect(p.queue_free)
+
+
+func _pop_panel(game: MiniGame, k: float) -> void:
+	game.pivot_offset = game.size / 2.0
+	var tw := game.create_tween()
+	tw.tween_property(game, "scale", Vector2(k, k), 0.05)
+	tw.tween_property(game, "scale", Vector2.ONE, 0.12)
+
+
+func _shake_panel(game: MiniGame) -> void:
+	var tw := game.create_tween()
+	for dx in [-10.0, 8.0, -5.0, 0.0]:
+		tw.tween_property(game, "position:x", game.position.x + dx, 0.03)
+	# レイアウトが途中で変わってもずれが残らないよう、最後は元の位置に戻す
+	var base := game.position.x
+	tw.tween_callback(func(): game.position.x = base)
 
 
 func _popup(game: MiniGame, text: String, success: bool) -> void:
@@ -422,38 +533,64 @@ func _popup(game: MiniGame, text: String, success: bool) -> void:
 func _layout() -> void:
 	var v := Screen.view_size()
 	_bg.size = v
+	_bg_dim.size = v
 	_overlay.size = v
 	var m := 12.0
 	var touch := _touch()
 	var portrait := Screen.portrait
 
-	# 上部HUD。縦向きはメイドを2段目に置く
-	var hud_h := 230.0 if portrait else 110.0
-	_money_label.position = Vector2(m + 8, m)
-	_status_label.position = Vector2(m + 8, m + 46)
-	_time_label.size = Vector2(160, 60)
-	_time_label.position = Vector2(v.x - 160 - m - 8, m)
+	# 上部HUD。縦向きはメイドと吹き出しを2段目に置く
+	var hud_h := 250.0 if portrait else 116.0
+	_money_label.position = Vector2(m + 14, m + 4)
+	_status_label.position = Vector2(m + 14, m + 50)
+	_time_label.size = Vector2(160, 64)
+	_time_label.position = Vector2(v.x - 160 - m - 12, m)
+	_time_label.add_theme_font_size_override("font_size", 52)
 	if portrait:
-		_status_label.position.y = m + 46
+		# 所持金の行が長くなるので、残り時間は2段目の右に置く
+		_time_label.add_theme_font_size_override("font_size", 40)
+		_time_label.position = Vector2(v.x - 160 - m - 12, m + 34)
+		_hud_box.position = Vector2(m, m - 4)
+		_hud_box.size = Vector2(v.x - m * 2, 92)
+		_maid.size = Vector2(150, 150)
 		_maid.position = Vector2(m, 100)
-		_maid.size = Vector2(120, 120)
-		_speech.position = Vector2(m + 130, 100)
-		_speech.size = Vector2(v.x - m * 2 - 140, 120)
+		_bubble.position = Vector2(m + 160, 116)
+		_bubble.size = Vector2(v.x - m * 2 - 160, 110)
 	else:
-		_maid.size = Vector2(hud_h - 10, hud_h - 10)
-		_maid.position = Vector2(v.x - _maid.size.x - 180, 5)
-		_speech.position = Vector2(v.x * 0.47, 5)
-		_speech.size = Vector2(_maid.position.x - v.x * 0.47 - 8, hud_h - 10)
+		_hud_box.position = Vector2(m, m - 4)
+		_hud_box.size = Vector2(v.x * 0.43, 92)
+		_maid.size = Vector2(118, 118)
+		_maid.position = Vector2(v.x - 118 - 186, 0)
+		_bubble.position = Vector2(v.x * 0.45 + m, m)
+		_bubble.size = Vector2(_maid.position.x - _bubble.position.x - 4, 84)
+	_speech.position = _bubble.position + Vector2(16, 4)
+	_speech.size = _bubble.size - Vector2(32, 8)
 
-	# オーバーレイ（ショップ中は文言を上に寄せてボタンを下に並べる）
+	# オーバーレイ。タイトル・結果は立ち絵を添える
+	var art := _title_art.visible
+	var text_rect := Rect2(m, m, v.x - m * 2, v.y - m * 2)
+	if art:
+		if portrait:
+			_title_art.size = Vector2(v.x * 0.9, v.y * 0.42)
+			_title_art.position = Vector2(v.x * 0.05, v.y - _title_art.size.y - m)
+			text_rect = Rect2(m, v.y * 0.06, v.x - m * 2, v.y * 0.5)
+		else:
+			_title_art.size = Vector2(v.x * 0.4, v.y - m * 2)
+			_title_art.position = Vector2(v.x * 0.58, m)
+			text_rect = Rect2(m, v.y * 0.08, v.x * 0.58, v.y * 0.84)
+	_ov_title.position = text_rect.position
+	_ov_title.size = Vector2(text_rect.size.x, 0)
+	var title_h := _ov_title.get_combined_minimum_size().y
 	if state == State.SHOP:
-		_overlay_label.position = Vector2(m, m)
-		_overlay_label.size = Vector2(v.x - m * 2, v.y * 0.3)
-		_shop_box.position = Vector2(v.x * 0.08, v.y * 0.3)
+		_overlay_label.position = Vector2(m, title_h + m)
+		_overlay_label.size = Vector2(v.x - m * 2, 80)
+		_overlay_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+		_shop_box.position = Vector2(v.x * 0.08, title_h + 110)
 		_shop_box.size = Vector2(v.x * 0.84, 0)
 	else:
-		_overlay_label.position = Vector2(m, m)
-		_overlay_label.size = v - Vector2(m * 2, m * 2)
+		_overlay_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+		_overlay_label.position = text_rect.position + Vector2(0, title_h + 20)
+		_overlay_label.size = Vector2(text_rect.size.x, text_rect.size.y - title_h - 20)
 
 	# 下部のタッチボタン
 	var pad_h := v.y * (0.13 if portrait else 0.2) if touch else 0.0

@@ -53,7 +53,14 @@
 - シングルスレッド出力（thread_support=false）なので COOP/COEP ヘッダ不要
 
 ## 画像素材
-- Codex で生成（`codex exec` の image_generation）。この環境ではCodexのサンドボックスが保存に失敗するため、
-  `~/.codex/generated_images/<session>/` から `assets/images/` にコピーする
+- キャラクターは**ファーリー（ケモノ）向けデザイン**で作る。メイドドラゴンはマズルのあるピンクの擬人化ドラゴン、
+  丸い体型（つるぷに）、黒白のメイド服。全年齢向けで性的な強調はしない。基準画像は `art/raw/maid_base.png`
+- 生成: `tools/gen_image.sh <出力> "<プロンプト>" [参照画像...]`（Codex の image_generation を使い、
+  `~/.codex/generated_images/` から回収する）。同じキャラの差分は基準画像を参照に渡して作る
+- 透過: 緑(#00FF00)背景で生成し `tools/chroma_key.py` で抜く（`--split` でスプライトシートを分割）
+- `art/raw/` は生成元の画像置き場（`.gdignore` でゲームには含めない）。ゲームで使うものは `assets/images/`
+  - `maid_full.png`（タイトル立ち絵）/ `maid_{normal,happy,scheme,panic}.png`（HUDの表情）
+  - `slot/*.png`（リール絵柄）/ `bg_casino.jpg`（背景）
+- 見た目の共通設定（色・ネオンのパネル・ボタン・文字のふち取り）は `scripts/ui_style.gd`
 - コードレビューやタスク委譲は Claude Code の Codex プラグイン（`/codex:review`, `/codex:rescue` 等）を使う
 - 生成AI素材であることは公開時に明記する

@@ -12,6 +12,8 @@ const GAP_SEC := 0.3 # カードとカードの間の空白
 
 var _card := {} # {"rank", "suit", "red", "left", "duration"}。空なら次のカード待ち
 var _gap := 0.5
+var _front := UiStyle.panel(UiStyle.GOLD, Color(0.98, 0.96, 0.9), 10, 12)
+var _back := UiStyle.panel(UiStyle.NEON.darkened(0.3), Color(0.35, 0.05, 0.25), 4, 12)
 
 
 func _init() -> void:
@@ -77,17 +79,17 @@ func _draw() -> void:
 	var card_h := minf(size.y - 170.0, 260.0)
 	var card_size := Vector2(card_h * 0.7, card_h)
 	var rect := Rect2(center - card_size / 2.0, card_size)
-	if not active:
-		draw_rect(rect, Color(0.25, 0.2, 0.3))
-		draw_centered("?", center, int(card_h * 0.4), Color(0.5, 0.5, 0.6))
+	if not active or _card.is_empty():
+		# 裏面
+		draw_style_box(_back, rect)
+		draw_centered("♦", center, int(card_h * 0.3), Color(1, 0.8, 0.3, 0.5))
 		return
-	if _card.is_empty():
-		draw_rect(rect, Color(0.2, 0.1, 0.3), false, 3.0)
-		return
-	draw_rect(rect, Color(0.97, 0.95, 0.9))
+	draw_style_box(_front, rect)
 	var col := Color(0.85, 0.1, 0.2) if _card["red"] else Color(0.1, 0.1, 0.15)
-	draw_centered(_card["suit"], center - Vector2(0, card_h * 0.12), int(card_h * 0.45), col)
-	draw_centered(_card["rank"], center + Vector2(0, card_h * 0.3), int(card_h * 0.2), col)
+	draw_centered(_card["suit"], center + Vector2(0, card_h * 0.05), int(card_h * 0.5), col)
+	var corner := int(card_h * 0.13)
+	draw_centered(_card["rank"], rect.position + Vector2(card_h * 0.1, card_h * 0.1), corner, col)
+	draw_centered(_card["suit"], rect.position + Vector2(card_h * 0.1, card_h * 0.22), corner, col)
 	# 残り時間バー
 	var ratio: float = _card["left"] / _card["duration"]
 	var bar := Rect2(rect.position.x, rect.end.y + 8, rect.size.x * ratio, 10)

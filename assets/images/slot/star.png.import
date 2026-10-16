@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dlorhywhxb2wn"
-path="res://.godot/imported/test_maid_dragon.png-4731329e5652d347e6e9538067d80565.ctex"
+uid="uid://c8a1p0s2n73kr"
+path="res://.godot/imported/star.png-783572bca0ac56788ba9ea75a976d20b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/images/test_maid_dragon.png"
-dest_files=["res://.godot/imported/test_maid_dragon.png-4731329e5652d347e6e9538067d80565.ctex"]
+source_file="res://assets/images/slot/star.png"
+dest_files=["res://.godot/imported/star.png-783572bca0ac56788ba9ea75a976d20b.ctex"]
 
 [params]
 

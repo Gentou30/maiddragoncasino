@@ -5,7 +5,9 @@ extends CanvasLayer
 ## 配置はゲーム側が place() で矩形を渡して決める。
 
 var _buttons: Array[TouchScreenButton] = []
-var _faces: Array[ColorRect] = []
+var _faces: Array[Panel] = []
+var _style_off := UiStyle.panel(UiStyle.NEON, Color(0.3, 0.06, 0.4, 0.85), 8, 20)
+var _style_on := UiStyle.panel(UiStyle.GOLD, Color(0.85, 0.55, 0.1, 0.95), 18, 20)
 var _texts: Array[Label] = []
 
 
@@ -25,7 +27,7 @@ func setup(lanes: Array[int], captions: Array[String]) -> void:
 		# 指を滑らせて隣のボタンに移っても反応させる
 		button.passby_press = true
 
-		var face := ColorRect.new()
+		var face := Panel.new()
 		face.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		button.add_child(face)
 
@@ -35,6 +37,7 @@ func setup(lanes: Array[int], captions: Array[String]) -> void:
 		text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		text.set_anchors_preset(Control.PRESET_FULL_RECT)
 		text.add_theme_font_size_override("font_size", 30)
+		UiStyle.outline(text, 6)
 		face.add_child(text)
 
 		button.pressed.connect(_set_lit.bind(n, true))
@@ -56,4 +59,4 @@ func place(rects: Array[Rect2]) -> void:
 
 
 func _set_lit(n: int, lit: bool) -> void:
-	_faces[n].color = Color(1.0, 0.8, 0.2, 0.9) if lit else Color(0.45, 0.12, 0.6, 0.85)
+	_faces[n].add_theme_stylebox_override("panel", _style_on if lit else _style_off)

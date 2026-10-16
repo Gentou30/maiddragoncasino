@@ -100,7 +100,9 @@ func _draw() -> void:
 		return
 	var ring := r * 0.32
 	var mid := r - ring / 2.0
-	# BUST の下地
+	# 外枠と BUST の下地
+	draw_circle(center, r + 8, Color(0.55, 0.38, 0.1))
+	draw_arc(center, r + 4, 0, TAU, 96, UiStyle.GOLD, 4.0)
 	draw_arc(center, mid, 0, TAU, 96, BUST_COLOR, ring)
 	# 当たり枠
 	var start := _cluster_at + _rot
@@ -113,7 +115,8 @@ func _draw() -> void:
 		var label_pos := center + Vector2.from_angle(start + w / 2.0) * mid
 		draw_centered(_fmt_mult(PRIZES[i]["mult"]), label_pos, int(ring * 0.42), Color.WHITE)
 		start += w
-	draw_circle(center, r - ring - 4, Color(0.08, 0.02, 0.12))
+	draw_circle(center, r - ring, Color(0.55, 0.38, 0.1))
+	draw_circle(center, r - ring - 6, Color(0.08, 0.02, 0.12))
 	# 結果表示
 	if _last_hit == -1:
 		draw_centered("BUST", center, int(r * 0.32), Color(1, 0.3, 0.3))
