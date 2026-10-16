@@ -1,10 +1,10 @@
 extends Control
 
 ## 3日間で借金を返すラン全体の進行。
-## TITLE → DAY_INTRO → PLAYING → SHOP（1・2日目の夜）→ … → 3日目終了で RESULT。
+## TITLE（→ STORY）→ DAY_INTRO → PLAYING → SHOP（1・2日目の夜）→ … → 3日目終了で RESULT。
 ## 1日目: スロット(A)、途中からカード(S)。2日目からルーレット(D)も加わる。
 
-enum State { TITLE, DAY_INTRO, PLAYING, SHOP, RESULT }
+enum State { TITLE, STORY, DAY_INTRO, PLAYING, SHOP, RESULT }
 
 const DAYS := 3
 const DAY_SEC := 40.0
@@ -17,6 +17,23 @@ const BG_TEXTURE := preload("res://assets/images/bg_casino.jpg")
 const MAID_FULL := preload("res://assets/images/maid_full.png")
 const COIN_TEXTURE := preload("res://assets/images/slot/coin.png")
 const MAID_MOODS := ["normal", "happy", "scheme", "panic"]
+const RICH_MARGIN := 10_000_000 # 完済してさらにこれだけ残れば大富豪エンド
+const DISHWASH_PER_YEAR := 2_000_000 # 破産エンドで「あと何年」を出すための皿洗いの年収
+const STORY := """目が覚めると、枕元に借金3000万円の借用書。
+保証人の欄には、なぜかご主人様の名前が。
+
+「ご安心ください♡ 返済プランはご用意しております！」
+笑顔で現れたのは、つるぷにメイドドラゴン。
+連れて行かれた先は、地下の違法カジノだった。
+
+スロット、カード、ルーレット――
+全部同時に回せば、3日で返せる…らしい。
+無責任なメイドにせかされる、地獄の3日間が始まる！"""
+const ENDINGS := {
+	"rich": {"title": "大富豪エンド", "art": preload("res://assets/images/ending_rich.jpg")},
+	"clear": {"title": "完済エンド", "art": preload("res://assets/images/ending_clear.jpg")},
+	"bad": {"title": "破産エンド", "art": preload("res://assets/images/ending_bad.jpg")},
+}
 
 const SlotGame := preload("res://scripts/games/slot_game.gd")
 const CardGame := preload("res://scripts/games/card_game.gd")
@@ -43,7 +60,7 @@ var combo_step := 0.5
 const NEGLECT_WARN_SEC := 4.0 # 触らずにこの秒数たつと警告
 const NEGLECT_SEC := 7.0 # この秒数たつと放置中になり、以後一定間隔で損失
 const NEGLECT_TICK_SEC := 2.0
-const NEGLECT_PENALTY := -100_000
+const NEGLECT_PENALTY := -150_000
 
 var games: Array[MiniGame] = []
 var _idle: Array[float] = [] # games[n] を最後に押してからの秒数
@@ -65,6 +82,7 @@ var _speech_at := 0.0
 const SPEECH_HOLD_SEC := 5.0 # プレイ中、この秒数たったら古いセリフを状況のセリフに置き換える
 var _ov_title: Label
 var _title_art: TextureRect
+var _art_frame: Panel
 var _money_label: Label
 var _status_label: Label
 var _time_label: Label
@@ -73,6 +91,7 @@ var _speech: Label
 var _overlay: ColorRect
 var _overlay_label: Label
 var _shop_box: VBoxContainer
+var _menu_box: HBoxContainer
 var _touch_pad: CanvasLayer
 
 
@@ -146,6 +165,11 @@ func _ready() -> void:
 	_title_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_title_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_title_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# エンディング絵（背景つきの正方形）の後ろに敷く額縁
+	_art_frame = Panel.new()
+	_art_frame.add_theme_stylebox_override("panel", UiStyle.panel(UiStyle.GOLD, UiStyle.GOLD, 18, 6))
+	_art_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_overlay.add_child(_art_frame)
 	_overlay.add_child(_title_art)
 	_ov_title = _make_label(60, UiStyle.GOLD, _overlay)
 	_ov_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -159,6 +183,21 @@ func _ready() -> void:
 	_shop_box = VBoxContainer.new()
 	_shop_box.add_theme_constant_override("separation", 12)
 	_overlay.add_child(_shop_box)
+	_menu_box = HBoxContainer.new()
+	_menu_box.add_theme_constant_override("separation", 24)
+	_menu_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	_overlay.add_child(_menu_box)
+	for item in [["スタート", "Space", _new_run], ["あらすじ", "A", _show_story]]:
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(220, 72)
+		b.add_theme_font_size_override("font_size", 28)
+		UiStyle.button_styles(b)
+		b.set_meta("label", item[0])
+		b.set_meta("key", item[1])
+		b.pressed.connect(func():
+			if state == State.TITLE and not _locked():
+				item[2].call())
+		_menu_box.add_child(b)
 
 	Screen.layout_changed.connect(_layout)
 	_layout()
@@ -191,20 +230,33 @@ func _set_state(s: State) -> void:
 	_overlay.visible = not playing
 	_touch_pad.visible = playing and _touch()
 	_shop_box.visible = s == State.SHOP
-	_title_art.visible = s == State.TITLE or s == State.RESULT
+	_menu_box.visible = s == State.TITLE
+	_title_art.visible = s in [State.TITLE, State.STORY, State.RESULT]
+	_title_art.texture = MAID_FULL
+	_overlay_label.add_theme_font_size_override("font_size", 24 if s in [State.STORY, State.RESULT] else 28)
 	for g in games:
 		g.active = false
 	_update_hud()
-	_layout()
+	# 見出しや本文の高さで配置が変わるので、呼び出し側が文言を入れ終えてから組み直す
+	_layout.call_deferred()
 
 
 func _show_title() -> void:
 	_set_state(State.TITLE)
 	var how := "下のボタン" if _touch() else "A / S / D キー"
 	_ov_title.text = "メイドドラゴン\nカジノ"
-	_overlay_label.text = "借金 %s を3日で返せ！\n%sで複数のギャンブルを同時に操作\n\n%sでスタート\n\nbuild %s" % [
-		_money_text(START_DEBT), how, _go_text(), _version]
+	_overlay_label.text = "借金 %s を3日で返せ！\n%sで複数のギャンブルを同時に操作\n\nbuild %s" % [
+		_money_text(START_DEBT), how, _version]
+	for b: Button in _menu_box.get_children():
+		b.text = b.get_meta("label") if _touch() else "[%s] %s" % [b.get_meta("key"), b.get_meta("label")]
 	_say("ご主人様♡ 借金はたったの3000万円です！")
+
+
+func _show_story() -> void:
+	_set_state(State.STORY)
+	_ov_title.text = "あらすじ"
+	_overlay_label.text = STORY + "\n\n%sでもどる" % _go_text()
+	_say("ぜんぶ合法ですよ♡ たぶん", "scheme")
 
 
 func _new_run() -> void:
@@ -233,12 +285,13 @@ func _show_day_intro() -> void:
 	if day == 2:
 		added = "\n★ ルーレット(D) 解禁！\n※ しばらく触らないゲームは「放置」で損失が出ます"
 	_ov_title.text = "DAY %d / %d" % [day, DAYS]
-	_overlay_label.text = "今日のイベント: %s\n%s%s\n\n返済まであと %s\n\n%sで開店" % [
-		event["name"], event["desc"], added, _money_text(target), _go_text()]
 	match day:
 		1: _say("1日目です♡ まずはスロットで肩慣らしですね！")
 		2: _say("今日はルーレットもありますよ♡ 全部同時です♡", "scheme")
 		_: _say("最終日です♡ 返せなかったら…うふふ♡", "scheme")
+	# 吹き出しは暗幕の後ろに隠れるので、セリフは本文にも入れる
+	_overlay_label.text = "今日のイベント: %s\n%s%s\n\n返済まであと %s\n\nメイド「%s」\n\n%sで開店" % [
+		event["name"], event["desc"], added, _money_text(target), _speech.text, _go_text()]
 
 
 func _start_day() -> void:
@@ -348,19 +401,33 @@ func _buy(i: int) -> void:
 	_show_day_intro()
 
 
+func _ending() -> String:
+	if money - debt >= RICH_MARGIN:
+		return "rich"
+	return "clear" if money >= debt else "bad"
+
+
 func _show_result() -> void:
 	_set_state(State.RESULT)
-	var cleared := money >= debt
-	_ov_title.text = "完済！！" if cleared else "破産…"
-	var lines := "所持金 %s\n借金 %s\n%s\n最大コンボ %d\n\n%sでもう一回" % [
-		_money_text(money), _money_text(debt),
-		("残り %s はメイドのお給料に" % _money_text(money - debt)) if cleared else ("足りない額 %s" % _money_text(debt - money)),
-		best_combo, _go_text()]
-	_overlay_label.text = lines
-	if cleared:
-		_say("おめでとうございます！ 次は私の借金ですね♡", "happy")
-	else:
-		_say("大丈夫です！ ご主人様にはまだ担保があります♡", "scheme")
+	var id := _ending()
+	_ov_title.text = ENDINGS[id]["title"]
+	_title_art.texture = ENDINGS[id]["art"]
+	var story := ""
+	match id:
+		"rich":
+			story = "借金を返しても、お金があふれて止まらない！\nご主人様はついにカジノのオーナーになった。"
+			_say("今日からここは私たちのお店です♡ 次はどこを買い占めます？", "happy")
+		"clear":
+			story = "夜明けとともに、借金を完済！\n財布は空っぽだけど、ご主人様は自由の身だ。"
+			_say("おめでとうございます♡ 来週のカジノも予約しておきました♡", "happy")
+		_:
+			var years := ceili(float(debt - money) / DISHWASH_PER_YEAR)
+			story = "借金は返しきれなかった…\nご主人様はカジノの厨房で皿洗いをすることに。\n（皿洗いのお給料だと、完済まであと約%d年）" % years
+			_say("大丈夫です♡ 私もお手伝いします！ モップはご主人様の分です♡", "scheme")
+	var left := "手元に残ったお金 %s" % _money_text(money - debt) if money >= debt else "足りない額 %s" % _money_text(debt - money)
+	_overlay_label.text = "%s\n\nメイド「%s」\n\n所持金 %s / 借金 %s\n%s\n最大コンボ %d\n\n%sでタイトルへ" % [
+		story, _speech.text, _money_text(money), _money_text(debt), left, best_combo, _go_text()]
+	_layout()
 
 
 # ---- 補正 ----
@@ -418,8 +485,8 @@ func multiplier() -> float:
 
 func _process(delta: float) -> void:
 	_clock += delta
-	if state == State.SHOP:
-		for b: Button in _shop_box.get_children():
+	if state in [State.SHOP, State.TITLE]:
+		for b: Button in (_shop_box if state == State.SHOP else _menu_box).get_children():
 			b.disabled = _locked()
 	if state != State.PLAYING:
 		return
@@ -446,10 +513,13 @@ func _process(delta: float) -> void:
 
 
 func _locked() -> bool:
-	return _clock - _state_at < (SHOP_LOCK_SEC if state == State.SHOP else INPUT_LOCK_SEC)
+	# 1日の終わりの連打で、アイテム購入や結果画面を読み飛ばさないよう長めにロックする
+	return _clock - _state_at < (SHOP_LOCK_SEC if state in [State.SHOP, State.RESULT] else INPUT_LOCK_SEC)
 
 
 func _input(event_in: InputEvent) -> void:
+	if OS.is_debug_build() and _debug_key(event_in):
+		return
 	var lane := Lanes.pressed_lane(event_in)
 	match state:
 		State.PLAYING:
@@ -465,15 +535,41 @@ func _input(event_in: InputEvent) -> void:
 				_buy(lane)
 			elif _is_go_key(event_in):
 				_buy(-1)
+		State.TITLE:
+			# タッチ・クリックはボタン側で処理する（画面のどこを押しても始まると、あらすじボタンが押せない）
+			if _locked():
+				return
+			if _is_go_key(event_in):
+				_new_run()
+			elif lane == 0:
+				_show_story()
 		_:
 			# プレイ中の連打で読み飛ばさないよう、レーンのキーではなく Space / タップで進める
 			if _locked() or not (_is_go_key(event_in) or _is_tap(event_in)):
 				return
 			match state:
-				State.TITLE, State.RESULT:
-					_new_run()
+				State.STORY, State.RESULT:
+					_show_title()
 				State.DAY_INTRO:
 					_start_day()
+
+
+## デバッグビルドだけ：F1〜F3 で各エンディング、F4 で3日目の残り5秒へ飛ぶ（確認用）
+func _debug_key(e: InputEvent) -> bool:
+	if not (e is InputEventKey and e.pressed and not e.echo):
+		return false
+	match e.physical_keycode:
+		KEY_F1, KEY_F2, KEY_F3:
+			money = debt + [RICH_MARGIN, 0, -12_345_000][e.physical_keycode - KEY_F1]
+			best_combo = 42
+			_show_result()
+		KEY_F4:
+			if state == State.PLAYING:
+				day = DAYS
+				elapsed = DAY_SEC - 5.0
+		_:
+			return false
+	return true
 
 
 func _is_go_key(e: InputEvent) -> bool:
@@ -639,9 +735,17 @@ func _layout() -> void:
 			_title_art.size = Vector2(v.x * 0.4, v.y - m * 2)
 			_title_art.position = Vector2(v.x * 0.58, m)
 			text_rect = Rect2(m, v.y * 0.08, v.x * 0.58, v.y * 0.84)
+	_art_frame.visible = art and state == State.RESULT
+	if _art_frame.visible:
+		var side := minf(_title_art.size.x, _title_art.size.y)
+		_art_frame.size = Vector2(side, side) + Vector2(8, 8)
+		_art_frame.position = _title_art.position + (_title_art.size - Vector2(side, side)) / 2.0 - Vector2(4, 4)
 	_ov_title.position = text_rect.position
 	_ov_title.size = Vector2(text_rect.size.x, 0)
 	var title_h := _ov_title.get_combined_minimum_size().y
+	if state == State.TITLE:
+		_menu_box.size = Vector2(text_rect.size.x, 0)
+		_menu_box.position = Vector2(text_rect.position.x, text_rect.end.y - _menu_box.get_combined_minimum_size().y)
 	if state == State.SHOP:
 		_overlay_label.position = Vector2(m, title_h + m)
 		_overlay_label.size = Vector2(v.x - m * 2, 80)

@@ -15,8 +15,8 @@ const TEXTURES := {
 }
 const PERFECT_SEC := 0.08
 const GOOD_SEC := 0.16
-const REWARD_PERFECT := 300_000
-const REWARD_GOOD := 100_000
+const REWARD_PERFECT := 200_000
+const REWARD_GOOD := 70_000
 const PENALTY_MISS := -50_000
 
 var _pos := 0.0 # リールの位置（単位: マス）。マス i は _pos == i のとき中央に来る
