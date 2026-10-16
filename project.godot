@@ -12,6 +12,7 @@ config/icon="res://icon.svg"
 [autoload]
 
 Lanes="*res://scripts/lanes.gd"
+Screen="*res://scripts/screen.gd"
 
 [display]
 
@@ -19,7 +20,6 @@ window/size/viewport_width=1280
 window/size/viewport_height=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
-window/handheld/orientation=4
 
 [gui]
 

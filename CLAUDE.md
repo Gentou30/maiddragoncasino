@@ -14,6 +14,12 @@
 - 画像の方向性：テスト画像 `assets/images/test_maid_dragon.png` の路線でOK
 - 開発順：MVP（スロット＋カードを30秒同時処理）で面白さを検証してから拡張
 
+## 現在の実装（MVP）
+- `scripts/game.gd`: 30秒ラウンド。スロット(A)→5秒後にカード(S)が合流。コンボ5ごとに倍率+0.5。ノルマ¥5,000,000
+- `scripts/games/mini_game.gd`: ミニゲーム基底。`press()` で入力を受け、`judged(text, amount, success)` で結果を返す
+- `scripts/games/slot_game.gd`（タイミング: 7が枠に来たら押す。秒数で判定）/ `card_game.gd`（赤なら押す。早いほど高報酬）
+- 数値（報酬・速度・判定幅）は各スクリプト先頭の定数で調整する
+
 ## 技術スタック
 - Godot 4.7.2（公式・非.NET版）、GDScript のみ（C#はWeb出力不可）、Compatibility レンダラー
 - 1280x720、stretch=canvas_items
@@ -22,7 +28,9 @@
   - ゲーム側は `Lanes.pressed_lane(event)` でレーン番号を得る。物理キー直書きはしない
   - レーン追加は `Lanes.LANES` に1行足すだけ（現在 A S D F / J K L ; の8レーン）
   - スマホ用は `scripts/touch_pad.gd`（TouchScreenButton＝マルチタッチ対応）を左右下に配置
-- 横画面前提（stretch aspect=expand で横長端末いっぱいに広げる）。縦向きでは横向き案内を出す
+- 縦横両対応。`scripts/screen.gd`（Autoload `Screen`）が向きに応じて基準解像度を 1280x720 / 720x1280 に切り替え、
+  `Screen.layout_changed` で各画面がレイアウトを組み直す（stretch aspect=expand）
+- タッチボタンはタッチ端末でのみ表示。配置はゲーム側が `touch_pad.place(rects)` で決める
 - 日本語はWebでOSフォントが使えないため `assets/fonts/MPLUSRounded1c-Bold.ttf` をテーマで既定フォントにしている
 
 ## コマンド
