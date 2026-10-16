@@ -18,6 +18,12 @@
 - Godot 4.7.2（公式・非.NET版）、GDScript のみ（C#はWeb出力不可）、Compatibility レンダラー
 - 1280x720、stretch=canvas_items
 - 入力は `_input()` のイベントベースで処理し、演出（Tween等）で入力を止めない
+- 操作は「レーン」で抽象化（`scripts/lanes.gd`, Autoload `Lanes`）。キー入力もタッチも `lane_N` アクションを発火する
+  - ゲーム側は `Lanes.pressed_lane(event)` でレーン番号を得る。物理キー直書きはしない
+  - レーン追加は `Lanes.LANES` に1行足すだけ（現在 A S D F / J K L ; の8レーン）
+  - スマホ用は `scripts/touch_pad.gd`（TouchScreenButton＝マルチタッチ対応）を左右下に配置
+- 横画面前提（stretch aspect=expand で横長端末いっぱいに広げる）。縦向きでは横向き案内を出す
+- 日本語はWebでOSフォントが使えないため `assets/fonts/MPLUSRounded1c-Bold.ttf` をテーマで既定フォントにしている
 
 ## コマンド
 - エディタ: `godot` （~/.local/bin/godot → ~/.local/opt/godot-4.7.2）
