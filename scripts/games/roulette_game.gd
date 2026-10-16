@@ -1,18 +1,18 @@
 extends MiniGame
 
 ## リスク判断型のルーレット。押すたびに掛け金を払い、上の針が指した枠の倍率で払い戻される。
-## 当たり枠は x1.5 / x3 / x8 / x3 / x1.5 と固まっていて、残りはすべて BUST（没収）。
+## 当たり枠は x1.5 / x2 / x4 / x2 / x1.5 と固まっていて、残りはすべて BUST（没収）。
 ## 適当に押すと期待値がマイナスになるよう、当たり枠の合計は円の3割にしている。
 ## 押したあとは少し止まって結果を見せ、当たり枠の位置を変えてから再び回る。
 
-const STAKE := 200_000
-const COOLDOWN_SEC := 0.55
+const STAKE := 150_000
+const COOLDOWN_SEC := 0.8
 # 当たり枠（円に対する割合）。並び順のまま隣り合って配置する
 const PRIZES: Array[Dictionary] = [
 	{"mult": 1.5, "width": 0.075, "color": Color(0.2, 0.55, 0.9)},
-	{"mult": 3.0, "width": 0.05, "color": Color(0.75, 0.3, 0.95)},
-	{"mult": 8.0, "width": 0.05, "color": Color(1.0, 0.75, 0.15)},
-	{"mult": 3.0, "width": 0.05, "color": Color(0.75, 0.3, 0.95)},
+	{"mult": 2.0, "width": 0.05, "color": Color(0.75, 0.3, 0.95)},
+	{"mult": 4.0, "width": 0.04, "color": Color(1.0, 0.75, 0.15)},
+	{"mult": 2.0, "width": 0.05, "color": Color(0.75, 0.3, 0.95)},
 	{"mult": 1.5, "width": 0.075, "color": Color(0.2, 0.55, 0.9)},
 ]
 const BUST_COLOR := Color(0.35, 0.05, 0.1)

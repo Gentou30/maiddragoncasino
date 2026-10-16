@@ -39,7 +39,15 @@ var gain_mult := 1.0
 var loss_mult := 1.0
 var combo_step := 0.5
 
+# 放置ペナルティ：1つのゲームだけに集中させないため、しばらく触っていないゲームから損失が出る
+const NEGLECT_WARN_SEC := 4.0 # 触らずにこの秒数たつと警告
+const NEGLECT_SEC := 7.0 # この秒数たつと放置中になり、以後一定間隔で損失
+const NEGLECT_TICK_SEC := 2.0
+const NEGLECT_PENALTY := -100_000
+
 var games: Array[MiniGame] = []
+var _idle: Array[float] = [] # games[n] を最後に押してからの秒数
+var _alert_labels: Array[Label] = []
 var lanes: Array[int] = [0, 1, 2] # games[n] はレーン lanes[n] で操作する
 
 var _state_at := 0.0 # 現在の画面になった時刻（入力ロック用）
@@ -91,6 +99,17 @@ func _ready() -> void:
 		g.judged.connect(_on_judged.bind(g))
 		add_child(g)
 		games.append(g)
+		_idle.append(0.0)
+		# パネルの上辺に重ねる警告バッジ（ゲームの描画より手前に出すため子にする）
+		var l := _make_label(20, Color.WHITE, g)
+		UiStyle.outline(l, 6)
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.z_index = 1
+		var badge := UiStyle.panel(UiStyle.RED, Color(0.45, 0.02, 0.1, 0.95), 6, 12)
+		badge.set_content_margin_all(4)
+		l.add_theme_stylebox_override("normal", badge)
+		l.visible = false
+		_alert_labels.append(l)
 
 	_money_label = _make_label(30, MiniGame.GOLD)
 	UiStyle.outline(_money_label)
@@ -212,7 +231,7 @@ func _show_day_intro() -> void:
 	var target := maxi(debt - money, 0)
 	var added := ""
 	if day == 2:
-		added = "\n★ ルーレット(D) 解禁！"
+		added = "\n★ ルーレット(D) 解禁！\n※ しばらく触らないゲームは「放置」で損失が出ます"
 	_ov_title.text = "DAY %d / %d" % [day, DAYS]
 	_overlay_label.text = "今日のイベント: %s\n%s%s\n\n返済まであと %s\n\n%sで開店" % [
 		event["name"], event["desc"], added, _money_text(target), _go_text()]
@@ -233,11 +252,51 @@ func _start_day() -> void:
 
 
 func _activate_games() -> void:
-	for g in games:
-		g.active = not g.is_locked()
+	for i in games.size():
+		games[i].active = not games[i].is_locked()
+		_idle[i] = 0.0
+	_update_alerts()
+
+
+## 触っていないゲームの警告表示と、放置中の損失
+func _tick_neglect(delta: float) -> void:
+	for i in games.size():
+		if not games[i].active:
+			continue
+		var before := _idle[i]
+		_idle[i] += delta
+		if _idle[i] >= NEGLECT_SEC and floorf((_idle[i] - NEGLECT_SEC) / NEGLECT_TICK_SEC) != floorf((before - NEGLECT_SEC) / NEGLECT_TICK_SEC):
+			_on_judged("放置", NEGLECT_PENALTY, false, games[i])
+			if _idle[i] - delta < NEGLECT_SEC:
+				_say("%sがお留守ですよ♡ お客様が帰っちゃいます" % games[i].caption, "panic")
+	_update_alerts()
+
+
+func _update_alerts() -> void:
+	for i in games.size():
+		var g := games[i]
+		var a := 0
+		if g.active and state == State.PLAYING:
+			if _idle[i] >= NEGLECT_SEC:
+				a = 2
+			elif _idle[i] >= NEGLECT_WARN_SEC:
+				a = 1
+		g.alert = a
+		var l := _alert_labels[i]
+		l.visible = a > 0
+		if a == 1:
+			l.text = " あと%d秒で放置！ " % ceili(NEGLECT_SEC - _idle[i])
+		elif a == 2:
+			l.text = " 放置中！ 損失発生 "
+		l.reset_size()
+		l.position = Vector2((g.size.x - l.size.x) / 2.0, -l.size.y / 2.0)
 
 
 func _end_day() -> void:
+	for g in games:
+		g.alert = 0
+	for l in _alert_labels:
+		l.visible = false
 	if day >= DAYS:
 		_show_result()
 	else:
@@ -380,6 +439,7 @@ func _process(delta: float) -> void:
 	if not _said_hurry and DAY_SEC - elapsed <= 10.0:
 		_said_hurry = true
 		_say("あれ？ もう時間がないですね♡", "panic")
+	_tick_neglect(delta)
 	if elapsed >= DAY_SEC:
 		_end_day()
 	_update_hud()
@@ -395,6 +455,7 @@ func _input(event_in: InputEvent) -> void:
 		State.PLAYING:
 			var n := lanes.find(lane)
 			if n >= 0:
+				_idle[n] = 0.0
 				games[n].press()
 		State.SHOP:
 			# タッチ・クリックはボタン側で処理する
@@ -445,7 +506,7 @@ func _on_judged(text: String, amount: int, success: bool, game: MiniGame) -> voi
 		_shake_panel(game)
 	if combo == 10:
 		_say("才能があります！ ぜひ人生を賭けましょう！", "happy")
-	elif text == "x8":
+	elif text == "x4":
 		_say("大当たりです♡ この調子で全部賭けましょう！", "happy")
 	elif money < 0 and money - gain >= 0:
 		_say("ご主人様!? 所持金がマイナスです！", "panic")
