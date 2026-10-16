@@ -16,7 +16,21 @@ var title := ""
 var caption := "" # タッチボタンに出す名前
 var key_hint := ""
 var active := false
-var difficulty := 0.0 # 0〜1。ラウンドの経過に合わせて上がる
+var difficulty := 0.0 # 0〜1。日数とラウンドの経過に合わせて上がる
+var lock_text := "" # 空でなければ未解禁としてパネルにこの文言だけ出す
+
+# アイテムやイベントによる補正。日の始めにゲーム本体がリセットして設定し直す
+var reward_mult := 1.0
+var speed_mult := 1.0
+
+
+func reset_mods() -> void:
+	reward_mult = 1.0
+	speed_mult = 1.0
+
+
+func is_locked() -> bool:
+	return lock_text != ""
 
 
 func press() -> void:
@@ -31,6 +45,8 @@ func draw_panel() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), BG)
 	draw_rect(Rect2(Vector2.ZERO, size), FRAME if active else FRAME.darkened(0.6), false, 4.0)
 	draw_string(font(), Vector2(0, 40), title, HORIZONTAL_ALIGNMENT_CENTER, size.x, 30, GOLD if active else Color.GRAY)
+	if is_locked():
+		draw_centered(lock_text, size / 2.0, 26, Color(0.7, 0.6, 0.8))
 	if key_hint != "":
 		draw_string(font(), Vector2(0, size.y - 16), key_hint, HORIZONTAL_ALIGNMENT_CENTER, size.x, 22, Color(1, 1, 1, 0.7))
 

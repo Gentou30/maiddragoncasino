@@ -33,7 +33,7 @@ func _ready() -> void:
 
 
 func speed() -> float: # マス/秒
-	return lerpf(3.0, 5.5, difficulty)
+	return lerpf(3.0, 5.5, difficulty) * speed_mult
 
 
 func _on_resized() -> void:
@@ -77,16 +77,17 @@ func press() -> void:
 	var sec := best_dist / speed()
 	if best >= 0 and sec <= PERFECT_SEC:
 		_used[best] = true
-		judged.emit("PERFECT!", REWARD_PERFECT, true)
+		judged.emit("PERFECT!", int(REWARD_PERFECT * reward_mult), true)
 	elif best >= 0 and sec <= GOOD_SEC:
 		_used[best] = true
-		judged.emit("GOOD", REWARD_GOOD, true)
+		judged.emit("GOOD", int(REWARD_GOOD * reward_mult), true)
 	else:
 		judged.emit("MISS", PENALTY_MISS, false)
 
 
 func _draw() -> void:
 	draw_panel()
+	_reel.visible = not is_locked()
 
 
 func _draw_reel() -> void:

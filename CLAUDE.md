@@ -14,11 +14,18 @@
 - 画像の方向性：テスト画像 `assets/images/test_maid_dragon.png` の路線でOK
 - 開発順：MVP（スロット＋カードを30秒同時処理）で面白さを検証してから拡張
 
-## 現在の実装（MVP）
-- `scripts/game.gd`: 30秒ラウンド。スロット(A)→5秒後にカード(S)が合流。コンボ5ごとに倍率+0.5。ノルマ¥5,000,000
-- `scripts/games/mini_game.gd`: ミニゲーム基底。`press()` で入力を受け、`judged(text, amount, success)` で結果を返す
-- `scripts/games/slot_game.gd`（タイミング: 7が枠に来たら押す。秒数で判定）/ `card_game.gd`（赤なら押す。早いほど高報酬）
+## 現在の実装
+- `scripts/game.gd`: 3日間のラン。TITLE → DAY_INTRO → PLAYING(40秒) → SHOP(夜の闇市) → … → RESULT
+  - 1日目: スロット(A)、5秒後にカード(S)。2日目からルーレット(D)。借金3000万を3日目終了時に返せれば完済
+  - 2・3日目はランダムイベント、夜は3つのアイテムから1つ選ぶ（メリット・デメリット付き）
+  - 画面切替直後は連打で進まないよう入力ロック（通常1.2秒、ショップ2秒）。進行は Space / タップ
+- `scripts/run_data.gd`: アイテム・イベントの定義。効果は `game.gd` の `_apply_mods()` で解釈
+- `scripts/games/mini_game.gd`: ミニゲーム基底。`press()` で入力、`judged(text, amount, success)` で結果。
+  `reward_mult` / `speed_mult` などの補正は毎日リセットして掛け直す
+- `slot_game.gd`（7が枠に来たら押す。秒数で判定）/ `card_game.gd`（赤なら押す。早いほど高報酬）/
+  `roulette_game.gd`（掛け金を払って針の位置の倍率で払い戻し。当たり枠は円の3割で、適当に押すと期待値マイナス）
 - 数値（報酬・速度・判定幅）は各スクリプト先頭の定数で調整する
+- タイトルに build（コミットSHA）を表示。CIが `version.txt` を書き出して同梱する。GitHub Pagesはキャッシュが最大10分残る
 
 ## 技術スタック
 - Godot 4.7.2（公式・非.NET版）、GDScript のみ（C#はWeb出力不可）、Compatibility レンダラー

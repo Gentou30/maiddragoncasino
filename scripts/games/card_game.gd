@@ -20,7 +20,7 @@ func _init() -> void:
 
 
 func duration() -> float:
-	return lerpf(1.5, 0.8, difficulty)
+	return lerpf(1.5, 0.8, difficulty) / speed_mult
 
 
 func _process(delta: float) -> void:
@@ -64,12 +64,14 @@ func press() -> void:
 	# 残り時間が多いほど高報酬（最大1.5倍、最低0.5倍）
 	var ratio: float = _card["left"] / _card["duration"]
 	var text := "はやい!" if ratio > 0.6 else "OK"
-	judged.emit(text, int(REWARD * (0.5 + ratio)), true)
+	judged.emit(text, int(REWARD * (0.5 + ratio) * reward_mult), true)
 	_clear()
 
 
 func _draw() -> void:
 	draw_panel()
+	if is_locked():
+		return
 	var center := size / 2.0 + Vector2(0, 10)
 	draw_centered("赤(♥♦)なら押す", Vector2(size.x / 2.0, 80), 22, Color(1, 0.6, 0.7))
 	var card_h := minf(size.y - 170.0, 260.0)
