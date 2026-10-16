@@ -10,6 +10,8 @@
 - ナビゲーター：つるぷにメイドドラゴン（笑顔で無責任な助言）
 - ビジュアル：地下カジノ×ネオン×90年代アーケード、派手だが判断対象の視認性は最優先
 - 架空通貨のみ。全年齢向け。激しい点滅は控えめにし軽減設定を用意
+- 方針：A（超高速・反射神経重視）を操作の基本とし、B（マルチタスク・リスク判断）の戦略要素を加える
+- 画像の方向性：テスト画像 `assets/images/test_maid_dragon.png` の路線でOK
 - 開発順：MVP（スロット＋カードを30秒同時処理）で面白さを検証してから拡張
 
 ## 技術スタック
@@ -25,9 +27,12 @@
 - ローカル確認: `python3 -m http.server 8000 -d build/web` → http://localhost:8000
 
 ## 公開
+- URL: https://gentou30.github.io/maiddragoncasino/ （リポジトリ: Gentou30/maiddragoncasino, public）
 - main に push すると `.github/workflows/pages.yml` が Web エクスポートして GitHub Pages にデプロイ
 - シングルスレッド出力（thread_support=false）なので COOP/COEP ヘッダ不要
 
 ## 画像素材
-- Codex で生成（`codex exec` の image_generation）。生成物は `assets/images/` に置く
+- Codex で生成（`codex exec` の image_generation）。この環境ではCodexのサンドボックスが保存に失敗するため、
+  `~/.codex/generated_images/<session>/` から `assets/images/` にコピーする
+- コードレビューやタスク委譲は Claude Code の Codex プラグイン（`/codex:review`, `/codex:rescue` 等）を使う
 - 生成AI素材であることは公開時に明記する
