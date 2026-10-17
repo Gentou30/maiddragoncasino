@@ -13,6 +13,7 @@ config/icon="res://icon.svg"
 
 Lanes="*res://scripts/lanes.gd"
 Screen="*res://scripts/screen.gd"
+Audio="*res://scripts/audio.gd"
 
 [display]
 

@@ -41,6 +41,7 @@ func _process(delta: float) -> void:
 
 
 func _deal() -> void:
+	Audio.sfx("card", -12.0)
 	var suit: String = SUITS[randi() % SUITS.size()]
 	_card = {
 		"rank": RANKS[randi() % RANKS.size()],
